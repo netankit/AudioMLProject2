@@ -1,4 +1,4 @@
-# Assignment 2: Speaker Detection – from GMMs to i-vectors
+# Speaker Detection – from GMMs to i-vectors
 
 *Goals*
 * Mix corpora
