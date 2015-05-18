@@ -32,7 +32,7 @@ replay_gain_ref_path = '/mnt/tatooine/data/ref_pink_16k.wav'
 
 #outputPath1 = '/mnt/alderaan/mlteam3/data/assignment2data' # MAIN
 #outputPath1 = '/mnt/alderaan/mlteam3/data/outputsample' #TESTING ONLY
-outputPath1 = sys.argv[1]
+outputPath1 = sys.argv[2]
 
 #pobability of pocket movement
 probOfPocketMov = 0.2
@@ -44,7 +44,7 @@ maxLenSilence = 0.2;
 #min size of break in sec
 minLenSilence = 0;
 
-numJobs = 6
+numJobs = 3
 
 wantedFs = 16000
 #maximum of the SNR in db (snrMaxDecimal = 10)
@@ -195,7 +195,7 @@ if __name__ == '__main__':
 	#get folder names (folders = speakers)
 	all_speaker_names = os.walk(rootPathCleanCorpus).next()[1]
 	print '%d speakers detected.' % (len(all_speaker_names))
-	
+
 	#USING SINGLE PROCESS
 	#for (ind,speaker) in enumerate(all_speaker_names):
 	#	mixFilesInSpeakerPath(ind,speaker) 
