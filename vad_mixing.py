@@ -1,3 +1,10 @@
+'''
+vad_mixing.py: This is a modified version of original vad_mixing.py  
+Original Author: Florian Schulze
+Modified by: Ankit Bahuguna
+
+'''
+
 import scipy.io.wavfile
 import scipy.signal
 import os
@@ -9,17 +16,23 @@ from joblib import Parallel, delayed
 import audiotools
 import time
 import shutil
+import sys
 
+if len(sys.argv)!=3:
+	 print '\nUsage: python vad_mixing.py <speaker_speech_dir> <output_directory_path>\n'
+	 sys.exit()
 
-impRespPath = '/mnt/tatooine/data/impulse_responses/16kHz/wavs16b'
+impRespPath = '/mnt/tatooine/data/impulse_responses/16kHz/wavs64b'
 noisePath = '/mnt/tatooine/data/noise/noise_equal_concat/train'
-#pocketMovementWav = '/mnt/naboo/noise/noise_equal_concat/trainPocketMovement.wav'
-#silenceWav = '/mnt/naboo/noise/silence.wav'
-rootPathCleanCorpus = '/mnt/tatooine/data/vad_speaker_recog/TIMIT_Buckeye/vad'
+rootPathCleanCorpus = sys.argv[1]
+#rootPathCleanCorpus = '/mnt/tatooine/data/vad_speaker_recog/TIMIT_Buckeye/vad' # MAIN
+#rootPathCleanCorpus = '/mnt/alderaan/mlteam3/data/sample' #TESTING ONLY
+
 replay_gain_ref_path = '/mnt/tatooine/data/ref_pink_16k.wav'
 
-outputPath1 = '/mnt/alderaan/mlteam3/data/assignment2_mixingdata'
-
+#outputPath1 = '/mnt/alderaan/mlteam3/data/assignment2data' # MAIN
+#outputPath1 = '/mnt/alderaan/mlteam3/data/outputsample' #TESTING ONLY
+outputPath1 = sys.argv[1]
 
 #pobability of pocket movement
 probOfPocketMov = 0.2
@@ -31,7 +44,7 @@ maxLenSilence = 0.2;
 #min size of break in sec
 minLenSilence = 0;
 
-numJobs = 20
+numJobs = 6
 
 wantedFs = 16000
 #maximum of the SNR in db (snrMaxDecimal = 10)
@@ -56,34 +69,23 @@ def cacheNoiseFiles():
 	wavFileList = glob.glob(os.path.join(noisePath, '*.wav'))
 	for wavFile in wavFileList:
 		(fs, samples) = scipy.io.wavfile.read(wavFile)
+		#print "Noise SAMPLES (dtype): "+str(samples.dtype)
 		noises.append(samples)
 		print 'Noise file %s read.' % (wavFile)
 	
-	#(_,pocketNoise) = scipy.io.wavfile.read(pocketMovementWav)
-	#(_,silence) = scipy.io.wavfile.read(silenceWav)
 	print 'Noise cached in memory.'
 
-'''
-def cacheImpulseResponses():
-	phones = ['lg', 's3', 's1', 'htc']
-	positions = ['oben', 'unten', 'tisch', 'tasche', 'hose1', 'hose2', 'table', 'jacke']
-	
-	for phone in phones:
-		irSignals = []
-		for position in positions:
-			fileName = 'ir_' + phone + '_' + position + '.wav'
-			(_, samples) = scipy.io.wavfile.read(os.path.join(impRespPath, fileName))
-			irSignals.append(samples)
-		impResps.append(irSignals)
-	print 'IRs cached in memory.'
-'''
+
 def cacheImpulseResponses():
 	for root, dirs, files in os.walk(impRespPath):
 		path = root.split('/')
 		for file in files:
+			irSignals = []
 			if(file.lower().endswith('.wav')):
 				(_, samples) = scipy.io.wavfile.read(os.path.join(impRespPath, file))
-				impResps.append(samples)
+				#print "IR SAMPLES (dtype): "+str(samples.dtype)
+				irSignals.append(samples)
+			impResps.append(irSignals)
 	print 'IRs cached in memory.'
 
 
@@ -108,43 +110,6 @@ def getRandomFadedNoise(nSamples):
 	noiseSegment[-fadeLength:] *= np.linspace(1, 0, num=fadeLength)
 	
 	return noiseSegment
-
-'''
-def getRandomFadedPocketNoise(nSamples):
-	
-	#get random start point
-	rangePotStartPoints = len(pocketNoise) - nSamples
-	if (rangePotStartPoints < 0):
-		return np.zeros(nSamples)
-	
-	startInd = math.ceil(random.random() * rangePotStartPoints)
-	noiseSegment = pocketNoise[startInd:startInd+nSamples]
-
-	#fade to avoid artifacts
-	fadeLength = min(len(noiseSegment), 2000)/2
-	noiseSegment[:fadeLength] *= np.linspace(0, 1, num=fadeLength)
-	noiseSegment[-fadeLength:] *= np.linspace(1, 0, num=fadeLength)
-
-	return noiseSegment
-
-
-def getFadedSilence(nSamples):
-
-	#get random start point
-	rangePotStartPoints = len(silence) - nSamples
-	if (rangePotStartPoints < 0):
-		return np.zeros(nSamples)
-
-	startInd = math.ceil(random.random() * rangePotStartPoints)
-	silenceSegment = silence[startInd:startInd+nSamples]
-
-	#fade to avoid artifacts
-	fadeLength = min(len(silenceSegment), 2000)/2
-	silenceSegment[:fadeLength] *= np.linspace(0, 1, num=fadeLength)
-	silenceSegment[-fadeLength:] *= np.linspace(1, 0, num=fadeLength)
-
-	return silenceSegment
-'''
 
 def mixFilesInSpeakerPath(spInd, folder):  
 	speakerPath = os.path.join(rootPathCleanCorpus, folder)
@@ -173,27 +138,6 @@ def mixFilesInSpeakerPath(spInd, folder):
 		gain = file_rplgain - ref_rplgain
 		normSignal = samples * (10**(gain/20.0))
 		
-		# SILENCE CODE STARTS HERE
-		
-		#add silence at start and end
-		orglen = len(normSignal)
-		'''
-		randSilenceLenInSec = round(minLenSilence + \
-			(maxLenSilence - minLenSilence) * random.random(), 1)
-		randSilenceLenInSamples = int(randSilenceLenInSec * fs)
-
-		normSignal = np.concatenate([ \
-			getFadedSilence(randSilenceLenInSamples), \
-			normSignal, \
-			getFadedSilence(randSilenceLenInSamples) \
-			])
-		
-		anoSilence = list(np.zeros((len(normSignal),), dtype=np.int))
-		anoSilence[randSilenceLenInSamples:randSilenceLenInSamples+len(anoList)] = anoList
-		anoList = anoSilence
-		'''
-		# End of Silence Code
-
 		if (random.random() < probOfNoise):
 			#mix with noise of same size
 			noise = getRandomFadedNoise(len(normSignal))
@@ -203,39 +147,20 @@ def mixFilesInSpeakerPath(spInd, folder):
 			noise /= 10**(randomSNR/20) #normSignal *= 10**(randomSNR/20);
 			normSignal += noise
 		
-		# POCKET NOISE CODE BEGINS HERE
-		'''
-		if (random.random() < probOfPocketMov):
-			#mix with noise of same size
-			noise = getRandomFadedPocketNoise(len(normSignal))
-			#calculate the random SNR
-			randomSNR = snrMin + (snrMax-snrMin) * random.random()
-			noise /= 10**(randomSNR/20)
-			normSignal += noise
-		'''
-		# End of Pocket Noise Code	
-		'''
-		randPhone = random.randint(0, len(impResps)-1)
-		#exclude target phone from training
-		while (randPhone == irPhoneIndex):
-			randPhone = random.randint(0, len(impResps)-1)
-		
-		randPos = random.randint(0, len(impResps[irPhoneIndex])-1)
-		#exclude target position from training
-		while (randPos == irTestPosIndex):
-			randPos = random.randint(0, len(impResps[irPhoneIndex])-1)
-		
-		irTrain = impResps[randPhone][randPos]
-		
-		print type(normSignal)
-		print "ex : "+ str(len(impResps[irPhoneIndex]))
-		print "normSignal Length: "+str(len(normSignal))
-		print "irTrain Length: "+str(irTrain.shape)
-		
-		convolvedSignal1 = scipy.signal.fftconvolve(normSignal, irTrain)[:len(normSignal)]
-		'''
-		convolvedSignal1 = normSignal
+		# CONVOLVING NOISE MIXED SPEECH SIGNALS WITH THE IMPSULSE RESPONSE SIGNALS	
 
+		irTrain1 = random.choice(impResps)
+		irTrain2 = np.asarray(irTrain1)
+		irTrain = irTrain2.flatten()
+
+		#print "irTrain Type: "+str(type(irTrain))
+		#print "irTrain Value: "+str(irTrain)
+		#print "irTrain Length: "+str(len(irTrain))
+		#print "irTrain Shape: "+str(irTrain.shape)
+		#print "normSignal Length: "+str(len(normSignal))
+
+		convolvedSignal1 = scipy.signal.fftconvolve(normSignal, irTrain)[:len(normSignal)]
+		
 		if not os.path.exists(outputPath1):
 		    os.makedirs(outputPath1)
 		
@@ -271,8 +196,11 @@ if __name__ == '__main__':
 	all_speaker_names = os.walk(rootPathCleanCorpus).next()[1]
 	print '%d speakers detected.' % (len(all_speaker_names))
 	
+	#USING SINGLE PROCESS
 	#for (ind,speaker) in enumerate(all_speaker_names):
 	#	mixFilesInSpeakerPath(ind,speaker) 
+	
+	# UTILIZING MULTIPLE PROCESSES via joblib.
 	results = Parallel(n_jobs=numJobs)(delayed(mixFilesInSpeakerPath)(ind,speaker) \
 		for (ind,speaker) in enumerate(all_speaker_names))
 	print 'All done.'
