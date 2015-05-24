@@ -1,14 +1,15 @@
-import facereclib.utils as utils
 import bob
-# import bob.io
 import numpy
-#import shutil
-import cPickle
-import scipy.sparse
-import random
 import os
+import cPickle
+import scipy
+
 
 print "Starting Scoring Experiments for GMM - UBM (MAP Enrollment)..."
+##
+#
+# Log Likelihood and Linear Scoring Implemented.
+#
 
 # parameters for the GMM
 variance_threshold = 5e-4
@@ -38,23 +39,57 @@ def fixname(filenamestr):
     tmp = filenamestr[:-3]
     return tmp+str("hdf5")
 
+
+def getModelFeatures(model_features_input):
+    '''Read model features - MFCC Features for the Speaker(s)'''
+    with open(model_features_input, 'rb') as infile:
+        model_features = cPickle.load(infile)
+    infile.close()
+    model_features_arr = scipy.sparse.coo_matrix((model_features), dtype=numpy.float64).toarray()
+    return model_features_arr
+
 # Calculates Linear Scores
 def calculateLinearScores(models_list, ubm, randomProbeFile):
     return bob.machine.linear_scoring(models_list, ubm, [randomProbeFile], [], frame_length_normalisation = True)
 
 # Computes the score for the given model and the given random probe using the scoring function from the config file
 
-for model in speaker_vaded_list:
-    randomProbeFileName = fixname(model)
-    print 'Printing Linear Scores (vs All Speakers) for Probe: '+str(randomProbeFileName)
-    randomProbeFile = bob.machine.GMMStats(bob.io.HDF5File(os.path.join(model_probe_output_path, randomProbeFileName)))
-
+def LinearScoreRun():
     for model in speaker_vaded_list:
-        print 'SPEAKER:'+ str(fixname(model))
-        models_list = [bob.machine.GMMMachine(bob.io.HDF5File(os.path.join(model_output_path, fixname(model))))]
+        randomProbeFileName = fixname(model)
+        print 'Printing Linear Scores (vs All Speakers) for Probe: '+str(randomProbeFileName)
+        randomProbeFile = bob.machine.GMMStats(bob.io.HDF5File(os.path.join(model_probe_output_path, randomProbeFileName)))
 
-        #Linear SCORING
-        score = calculateLinearScores(models_list, ubm, randomProbeFile)
-        print "SCORE: "+str(score)
+        for model in speaker_vaded_list:
+            print 'SPEAKER:'+ str(fixname(model))
 
-        #Using: probe log_likelihood of ubm and enrolled gmm to compare the score!
+            gmm_model_file = bob.machine.GMMMachine(bob.io.HDF5File(os.path.join(model_output_path, fixname(model))))
+            models_list = [gmm_model_file]
+
+            #Linear SCORING
+            score = calculateLinearScores(models_list, ubm, randomProbeFile)
+            print "SCORE: "+str(score)
+
+def LogLikelihoodScoreRun():
+    for testspeaker in speaker_vaded_list:
+        print 'Printing Log Likelihood Scores (vs All Speakers) for Probe: '+str(testspeaker)
+        test_feature = getModelFeatures(os.path.join(model_features_path, testspeaker))
+        for model in speaker_vaded_list:
+            print 'SPEAKER:'+ str(fixname(model))
+            gmm_model_file = bob.machine.GMMMachine(bob.io.HDF5File(os.path.join(model_output_path, fixname(model))))
+            #score = calculateLogLikelihoodScores(models_list, ubm, randomProbeFile)
+            score = numpy.mean([gmm_model_file.log_likelihood(row_sample) - ubm.log_likelihood(row_sample)
+                for row_sample in test_feature])
+            print "SCORE: "+str(score)
+
+
+# Run to calculate Linear Scores (vs All Speakers) for Probe:
+print 'Computing Linear Scores'
+LinearScoreRun()
+
+# Run to calculate Log Likelihood (vs All Speakers) for Probe:
+# Using: Probe log_likelihood of UBM and enrolled gmm to compare the score!
+print 'Computing Log Likelihood Scores'
+LogLikelihoodScoreRun()
+
+

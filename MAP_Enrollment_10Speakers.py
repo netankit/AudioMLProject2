@@ -7,7 +7,7 @@ import cPickle
 import scipy.sparse
 import random
 import os
-print "Start..."
+print "Starting MAP GMM-UBM Enrollment for 'n' Speakers..."
 # parameters for the GMM
 training_threshold = 5e-4
 variance_threshold = 5e-4
